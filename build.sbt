@@ -31,6 +31,7 @@ lazy val httpCore = (crossProject(JSPlatform, JVMPlatform) in file("http-core"))
     name := "http-core",
     libraryDependencies ++= Seq(
       "com.peknight" %%% "codec-http4s" % pekCodecVersion,
+      "com.peknight" %%% "codec-circe" % pekCodecVersion,
       "com.peknight" %%% "http4s-ext" % pekExtVersion,
     ),
   )
