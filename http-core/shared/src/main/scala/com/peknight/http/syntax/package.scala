@@ -1,4 +1,4 @@
-package com.peknight.http.method.retry
+package com.peknight.http
 
 package object syntax:
   object eitherF extends EitherFSyntax
