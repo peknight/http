@@ -9,6 +9,7 @@ import cats.syntax.option.*
 import cats.syntax.order.*
 import com.peknight.cats.instances.time.instant.given
 import com.peknight.commons.time.syntax.temporal.-
+import com.peknight.error.syntax.applicativeError.asError
 import com.peknight.security.key.store.pkcs12
 import com.peknight.security.provider.Provider
 import fs2.Stream
@@ -22,12 +23,12 @@ import scala.concurrent.duration.*
 
 object AutoRenewTLSServer:
   private def check[F[_]: Sync](certificate: X509Certificate, threshold: FiniteDuration)
-                       (fetch: F[(NonEmptyList[X509Certificate], PrivateKey)])
+                               (fetch: F[(NonEmptyList[X509Certificate], PrivateKey)])
   : F[Option[(NonEmptyList[X509Certificate], PrivateKey)]] =
       Option(certificate.getNotAfter).map(_.toInstant) match
         case Some(notAfter) =>
           Clock[F].realTimeInstant.flatMap {
-            case now if now >= notAfter - threshold => fetch.map(_.some)
+            case now if now >= notAfter - threshold => fetch.asError.map(_.toOption)
             case _ => none.pure[F]
           }
         case _ => none.pure[F]
