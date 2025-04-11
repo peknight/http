@@ -38,8 +38,22 @@ lazy val httpCore = (crossProject(JSPlatform, JVMPlatform) in file("http-core"))
     ),
   )
 
+lazy val httpServer = (crossProject(JSPlatform, JVMPlatform) in file("http-server"))
+  .settings(commonSettings)
+  .settings(
+    name := "http-server",
+    libraryDependencies ++= Seq(
+      "com.peknight" %%% "commons-time" % pekCommonsVersion,
+      "com.peknight" %%% "cats-instances-time" % pekInstancesVersion,
+      "com.peknight" %%% "security-core" % pekSecurityVersion,
+    ),
+  )
+
+val http4sVersion = "1.0.0-M34"
 val pekVersion = "0.1.0-SNAPSHOT"
 val pekCodecVersion = pekVersion
 val pekExtVersion = pekVersion
 val pekMethodVersion = pekVersion
 val pekCommonsVersion = pekVersion
+val pekInstancesVersion = pekVersion
+val pekSecurityVersion = pekVersion
