@@ -19,6 +19,8 @@ lazy val http = (project in file("."))
   .aggregate(
     httpCore.jvm,
     httpCore.js,
+    httpServer.jvm,
+    httpServer.js,
   )
   .settings(commonSettings)
   .settings(
