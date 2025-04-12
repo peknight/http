@@ -22,7 +22,9 @@ import java.time.Instant
 import scala.concurrent.duration.*
 
 object AutoRenewTLSServer:
-  private def check[F[_]: Sync](certificate: X509Certificate, threshold: FiniteDuration)
+  private[server] case class State[F[_], Server](certificates: NonEmptyList[X509Certificate], key: PrivateKey,
+                                                 server: Server, release: F[Unit])
+  private def renew[F[_]: Sync](certificate: X509Certificate, threshold: FiniteDuration)
                                (fetch: F[(NonEmptyList[X509Certificate], PrivateKey)])
   : F[Option[(NonEmptyList[X509Certificate], PrivateKey)]] =
       Option(certificate.getNotAfter).map(_.toInstant) match
@@ -33,9 +35,9 @@ object AutoRenewTLSServer:
           }
         case _ => none.pure[F]
 
-  private def allocated[F[_]: Async, Server](certificates: NonEmptyList[X509Certificate], key: PrivateKey,
-                                             alias: String, keyPassword: String, provider: Option[Provider | JProvider])
-                                            (builder: TLSContext[F] => Resource[F, Server])
+  private def allocated[F[_] : Async, Server](certificates: NonEmptyList[X509Certificate], key: PrivateKey,
+                                              alias: String, keyPassword: String, provider: Option[Provider | JProvider])
+                                             (builder: TLSContext[F] => Resource[F, Server])
   : F[(Server, F[Unit])] =
     for
       keyStore <- pkcs12[F](alias, key, keyPassword, certificates, provider)
@@ -44,33 +46,48 @@ object AutoRenewTLSServer:
     yield
       (server, release)
 
+  private def run[F[_]: Async, Server](state: Option[State[F, Server]], threshold: FiniteDuration,
+                                       alias: String, keyPassword: String,
+                                       provider: Option[Provider | JProvider])
+                                      (fetch: Boolean => F[(NonEmptyList[X509Certificate], PrivateKey)])
+                                      (builder: TLSContext[F] => Resource[F, Server])
+  : F[State[F, Server]] =
+    state match
+      case Some(state @ State(certificates, key, server, release)) =>
+        renew[F](certificates.head, threshold)(fetch(false)).flatMap {
+          case Some((certificates, key)) =>
+            for
+              _ <- release
+              (server, release) <- allocated[F, Server](certificates, key, alias, keyPassword, provider)(builder)
+            yield
+              State(certificates, key, server, release)
+          case _ => state.pure[F]
+        }
+      case _ =>
+        for
+          (certificates, key) <- fetch(true)
+          (certificates, key) <- renew[F](certificates.head, threshold)(fetch(false)).map(_.getOrElse((certificates, key)))
+          (server, release) <- allocated[F, Server](certificates, key, alias, keyPassword, provider)(builder)
+        yield
+          State(certificates, key, server, release)
+
   def apply[F[_]: Async, Server](scheduler: Stream[F, ?], threshold: FiniteDuration = 7.days,
                                  alias: String = "", keyPassword: String = "",
                                  provider: Option[Provider | JProvider] = None)
-                                (fetch: F[(NonEmptyList[X509Certificate], PrivateKey)])
+                                // def fetch(isInit: Boolean): F[(NonEmptyList[X509Certificate], PrivateKey)]
+                                (fetch: Boolean => F[(NonEmptyList[X509Certificate], PrivateKey)])
                                 (builder: TLSContext[F] => Resource[F, Server]): Resource[F, Server] =
     Resource.make[F, (Server, F[Unit])] {
       for
-        (certificates, key) <- fetch
-        (server, release) <- allocated[F, Server](certificates, key, alias, keyPassword, provider)(builder)
-        res <- scheduler.zipRight(Stream.unfoldEval[F, (X509Certificate, Server, F[Unit]), (Server, F[Unit])](
-          (certificates.head, server, release)
-        ) { case (certificate, server, release) =>
+        init <- run[F, Server](None, threshold, alias, keyPassword, provider)(fetch)(builder)
+        res <- scheduler.zipRight(Stream.unfoldEval[F, State[F, Server], (Server, F[Unit])](init) { state =>
           for
-            option <- check[F](certificate, threshold)(fetch)
-            tuple <- option match
-              case Some((certificates, key)) =>
-                for
-                  _ <- release
-                  (server, release) <- allocated[F, Server](certificates, key, alias, keyPassword, provider)(builder)
-                yield
-                  ((server, release), (certificates.head, server, release))
-              case _ => ((server, release), (certificate, server, release)).pure[F]
+            next <- run[F, Server](state.some, threshold, alias, keyPassword, provider)(fetch)(builder)
           yield
-            tuple.some
+            ((next.server, next.release), next).some
         }).compile.last
       yield
-        res.getOrElse((server, release))
+        res.getOrElse((init.server, init.release))
     } { case (server, release) => release }.map(_._1)
 
 end AutoRenewTLSServer
