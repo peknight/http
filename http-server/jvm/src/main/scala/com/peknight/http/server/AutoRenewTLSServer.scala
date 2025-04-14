@@ -2,6 +2,7 @@ package com.peknight.http.server
 
 import cats.data.NonEmptyList
 import cats.effect.*
+import cats.effect.syntax.spawn.*
 import cats.syntax.applicative.*
 import cats.syntax.flatMap.*
 import cats.syntax.functor.*
@@ -10,6 +11,7 @@ import cats.syntax.order.*
 import com.peknight.cats.instances.time.instant.given
 import com.peknight.commons.time.syntax.temporal.-
 import com.peknight.error.syntax.applicativeError.asError
+import com.peknight.http.server.AutoRenewTLSServer.State
 import com.peknight.security.key.store.pkcs12
 import com.peknight.security.provider.Provider
 import fs2.Stream
@@ -21,9 +23,13 @@ import java.security.{PrivateKey, Provider as JProvider}
 import java.time.Instant
 import scala.concurrent.duration.*
 
+case class AutoRenewTLSServer[F[_], Server](ref: Ref[F, State[F, Server]],
+                                            outcome: F[Outcome[F, Throwable, Option[State[F, Server]]]])
+
 object AutoRenewTLSServer:
-  private[server] case class State[F[_], Server](certificates: NonEmptyList[X509Certificate], key: PrivateKey,
-                                                 server: Server, release: F[Unit])
+  case class State[F[_], Server](certificates: NonEmptyList[X509Certificate], key: PrivateKey,
+                                 server: Server, release: F[Unit])
+
   private def renew[F[_]: Sync](certificate: X509Certificate, threshold: FiniteDuration)
                                (fetch: F[(NonEmptyList[X509Certificate], PrivateKey)])
   : F[Option[(NonEmptyList[X509Certificate], PrivateKey)]] =
@@ -71,23 +77,24 @@ object AutoRenewTLSServer:
         yield
           State(certificates, key, server, release)
 
-  def apply[F[_]: Async, Server](scheduler: Stream[F, ?], threshold: FiniteDuration = 7.days,
+  def build[F[_]: Async, Server](scheduler: Stream[F, ?], threshold: FiniteDuration = 7.days,
                                  alias: String = "", keyPassword: String = "",
                                  provider: Option[Provider | JProvider] = None)
                                 // def fetch(isInit: Boolean): F[(NonEmptyList[X509Certificate], PrivateKey)]
                                 (fetch: Boolean => F[(NonEmptyList[X509Certificate], PrivateKey)])
-                                (builder: TLSContext[F] => Resource[F, Server]): Resource[F, Server] =
-    Resource.make[F, (Server, F[Unit])] {
-      for
-        init <- run[F, Server](None, threshold, alias, keyPassword, provider)(fetch)(builder)
-        res <- scheduler.zipRight(Stream.unfoldEval[F, State[F, Server], (Server, F[Unit])](init) { state =>
+                                (builder: TLSContext[F] => Resource[F, Server]): Resource[F, AutoRenewTLSServer[F, Server]] =
+    for
+      init <- Resource.eval(run[F, Server](None, threshold, alias, keyPassword, provider)(fetch)(builder))
+      ref <- Resource.eval(Ref.of[F, State[F, Server]](init))
+      outcome <- scheduler.zipRight(Stream.unfoldEval[F, State[F, Server], State[F, Server]](init) {
+        state =>
           for
             next <- run[F, Server](state.some, threshold, alias, keyPassword, provider)(fetch)(builder)
+            _ <- ref.set(next)
           yield
-            ((next.server, next.release), next).some
-        }).compile.last
-      yield
-        res.getOrElse((init.server, init.release))
-    } { case (server, release) => release }.map(_._1)
+            (next, next).some
+      }).compile.last.background.onFinalize(ref.get.flatMap(_.release))
+    yield
+      AutoRenewTLSServer[F, Server](ref, outcome)
 
 end AutoRenewTLSServer
