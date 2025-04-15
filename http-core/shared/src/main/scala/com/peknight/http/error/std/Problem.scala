@@ -21,12 +21,18 @@ case class Problem(
                     ext: JsonObject = JsonObject.empty
                   ) extends com.peknight.http.error.Problem
 object Problem:
-  given codecProblem[F[_], S](using Monad[F], ObjectType[S], NullType[S], ArrayType[S], BooleanType[S], NumberType[S],
-                              StringType[S], Encoder[F, S, JsonObject], Decoder[F, Cursor[S], JsonObject])
-  : Codec[F, S, Cursor[S], Problem] =
+  given encodeProblem[F[_], S](using Monad[F], ObjectType[S], NullType[S], ArrayType[S], BooleanType[S], NumberType[S],
+                               StringType[S], Encoder[F, S, JsonObject]): Encoder[F, S, Problem] =
     given CodecConfiguration = CodecConfiguration.default.withExtField("ext")
-    Codec.derived[F, S, Problem]
-  given jsonCodecProblem[F[_]: Monad]: Codec[F, Json, Cursor[Json], Problem] =
-    codecProblem[F, Json]
+    Encoder.derived[F, S, Problem]
+  given decodeProblem[F[_], S](using Monad[F], ObjectType[S], NullType[S], ArrayType[S], BooleanType[S], NumberType[S],
+                               StringType[S], Decoder[F, Cursor[S], JsonObject])
+  : Decoder[F, Cursor[S], Problem] =
+    given CodecConfiguration = CodecConfiguration.default.withExtField("ext")
+    Decoder.derived[F, S, Problem]
+  given jsonEncodeProblem[F[_]: Monad]: Encoder[F, Json, Problem] =
+    encodeProblem[F, Json]
+  given jsonDecodeProblem[F[_]: Monad]: Decoder[F, Cursor[Json], Problem] =
+    decodeProblem[F, Json]
   given circeCodecProblem: io.circe.Codec[Problem] = codec[Problem]
 end Problem
