@@ -3,7 +3,7 @@ package com.peknight.http.error.std
 import cats.Monad
 import com.peknight.codec.circe.iso.codec
 import com.peknight.codec.circe.sum.jsonType.given
-import com.peknight.codec.configuration.CodecConfiguration
+import com.peknight.codec.config.CodecConfig
 import com.peknight.codec.cursor.Cursor
 import com.peknight.codec.http4s.instances.status.given
 import com.peknight.codec.http4s.instances.uri.given
@@ -23,12 +23,12 @@ case class Problem(
 object Problem:
   given encodeProblem[F[_], S](using Monad[F], ObjectType[S], NullType[S], ArrayType[S], BooleanType[S], NumberType[S],
                                StringType[S], Encoder[F, S, JsonObject]): Encoder[F, S, Problem] =
-    given CodecConfiguration = CodecConfiguration.default.withExtField("ext")
+    given CodecConfig = CodecConfig.default.withExtField("ext")
     Encoder.derived[F, S, Problem]
   given decodeProblem[F[_], S](using Monad[F], ObjectType[S], NullType[S], ArrayType[S], BooleanType[S], NumberType[S],
                                StringType[S], Decoder[F, Cursor[S], JsonObject])
   : Decoder[F, Cursor[S], Problem] =
-    given CodecConfiguration = CodecConfiguration.default.withExtField("ext")
+    given CodecConfig = CodecConfig.default.withExtField("ext")
     Decoder.derived[F, S, Problem]
   given jsonEncodeProblem[F[_]: Monad]: Encoder[F, Json, Problem] =
     encodeProblem[F, Json]
