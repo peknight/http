@@ -23,41 +23,41 @@ import scala.concurrent.duration.*
 
 package object retry:
 
-  def random[F[_] : {Async, RandomProvider}, A, B](fe: F[Either[A, HttpResponse[B]]])
-                                                  (f: (Either[Error, HttpResponse[B]], RetryState) => StateT[F, (Option[Instant], Random[F]), Retry])
-  : F[Either[Error, HttpResponse[B]]] =
+  def random[F[_]: {Async, RandomProvider}, A](fe: F[Either[Error, HttpResponse[A]]])
+                                              (f: (Either[Error, HttpResponse[A]], RetryState) => StateT[F, (Option[Instant], Random[F]), Retry])
+  : F[Either[Error, HttpResponse[A]]] =
     val eitherT =
       for
         random <- EitherT(RandomProvider[F].random.asError)
-        result <- EitherT(stateT[F, A, HttpResponse[B], (Option[Instant], Random[F])](fe)(f).runA((None, random)))
+        result <- EitherT(stateT[F, (Option[Instant], Random[F]), HttpResponse[A]](fe)(f).runA((None, random)))
       yield
         result
     eitherT.value
 
-  def retryRandom[F[_] : {Async, RandomProvider}, A, B](fe: F[Either[A, HttpResponse[B]]])
-                                                       (maxAttempts: Option[Int] = Some(3),
-                                                        timeout: Option[FiniteDuration] = None,
-                                                        interval: Option[FiniteDuration] = Some(1.second),
-                                                        offset: Option[Interval[FiniteDuration]] = None,
-                                                        exponentialBackoff: Boolean = false)
-                                                       (success: Either[Error, HttpResponse[B]] => Boolean)
-                                                       (effect: (Either[Error, HttpResponse[B]], RetryState, Retry) => F[Unit])
-  : F[Either[Error, HttpResponse[B]]] =
+  def retryRandom[F[_]: {Async, RandomProvider}, A](fe: F[Either[Error, HttpResponse[A]]])
+                                                   (maxAttempts: Option[Int] = Some(3),
+                                                    timeout: Option[FiniteDuration] = None,
+                                                    interval: Option[FiniteDuration] = Some(1.second),
+                                                    offset: Option[Interval[FiniteDuration]] = None,
+                                                    exponentialBackoff: Boolean = false)
+                                                   (success: Either[Error, HttpResponse[A]] => Boolean)
+                                                   (effect: (Either[Error, HttpResponse[A]], RetryState, Retry) => F[Unit])
+  : F[Either[Error, HttpResponse[A]]] =
     random(fe)(randomOffset(maxAttempts, timeout, interval, offset, exponentialBackoff)(success)(effect))
 
-  def retry[F[_] : Async, A, B](fe: F[Either[A, HttpResponse[B]]])
-                               (maxAttempts: Option[Int] = Some(3),
-                                timeout: Option[FiniteDuration] = None,
-                                interval: Option[FiniteDuration] = Some(1.second),
-                                offset: Option[FiniteDuration] = None,
-                                exponentialBackoff: Boolean = false)
-                               (success: Either[Error, HttpResponse[B]] => Boolean)
-                               (effect: (Either[Error, HttpResponse[B]], RetryState, Retry) => F[Unit])
-  : F[Either[Error, HttpResponse[B]]] =
-    stateT[F, A, HttpResponse[B], (Option[Instant], Unit)](fe)(fixedOffset(maxAttempts, timeout, interval, offset,
+  def retry[F[_]: Async, A](fe: F[Either[Error, HttpResponse[A]]])
+                           (maxAttempts: Option[Int] = Some(3),
+                            timeout: Option[FiniteDuration] = None,
+                            interval: Option[FiniteDuration] = Some(1.second),
+                            offset: Option[FiniteDuration] = None,
+                            exponentialBackoff: Boolean = false)
+                           (success: Either[Error, HttpResponse[A]] => Boolean)
+                           (effect: (Either[Error, HttpResponse[A]], RetryState, Retry) => F[Unit])
+  : F[Either[Error, HttpResponse[A]]] =
+    stateT[F, (Option[Instant], Unit), HttpResponse[A]](fe)(fixedOffset(maxAttempts, timeout, interval, offset,
       exponentialBackoff)(success)(effect)).runA((None, ()))
 
-  private def handleRetryAfterHeader[F[_]: Sync, A, S](either: Either[Error, HttpResponse[A]])
+  private def handleRetryAfterHeader[F[_]: Sync, S, A](either: Either[Error, HttpResponse[A]])
   : StateT[F, (Option[Instant], S), Option[FiniteDuration]] =
     def toDuration(retryAfter: Instant): StateT[F, (Option[Instant], S), Option[FiniteDuration]] =
       StateT.liftF[F, (Option[Instant], S), FiniteDuration](Clock[F].realTime.map(now => retryAfter.toDuration - now))
@@ -79,7 +79,7 @@ package object retry:
           sleep
   end handleRetryAfterHeader
 
-  private def handleState[F[_]: Sync, A, S](maxAttempts: Option[Int] = Some(3),
+  private def handleState[F[_]: Sync, S, A](maxAttempts: Option[Int] = Some(3),
                                             timeout: Option[FiniteDuration] = None,
                                             interval: Option[FiniteDuration] = Some(1.second),
                                             exponentialBackoff: Boolean = false)
@@ -93,7 +93,7 @@ package object retry:
         else if maxAttempts.exists(_ <= state.attempts) then StateT.pure(MaxAttempts(state.attempts))
         else
           for
-            sleep <- handleRetryAfterHeader[F, A, S](either)
+            sleep <- handleRetryAfterHeader[F, S, A](either)
             retry <- sleep match
               case Some(sleep) => StateT.pure(Retry.After(sleep))
               case None =>
@@ -141,5 +141,5 @@ package object retry:
                                         (success: (Either[Error, HttpResponse[A]]) => Boolean)
                                         (effect: (Either[Error, HttpResponse[A]], RetryState, Retry) => F[Unit])
   : (Either[Error, HttpResponse[A]], RetryState) => StateT[F, (Option[Instant], Unit), Retry] =
-    handleState[F, A, Unit](maxAttempts, timeout, interval, exponentialBackoff)(success)(effect)(StateT.pure(offset))
+    handleState[F, Unit, A](maxAttempts, timeout, interval, exponentialBackoff)(success)(effect)(StateT.pure(offset))
 end retry
