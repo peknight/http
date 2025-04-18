@@ -1,6 +1,6 @@
 package com.peknight.http.error.std
 
-import cats.Monad
+import cats.{Monad, Show}
 import com.peknight.codec.circe.iso.codec
 import com.peknight.codec.circe.sum.jsonType.given
 import com.peknight.codec.config.CodecConfig
@@ -26,7 +26,7 @@ object Problem:
     given CodecConfig = CodecConfig.default.withExtField("ext")
     Encoder.derived[F, S, Problem]
   given decodeProblem[F[_], S](using Monad[F], ObjectType[S], NullType[S], ArrayType[S], BooleanType[S], NumberType[S],
-                               StringType[S], Decoder[F, Cursor[S], JsonObject])
+                               StringType[S], Decoder[F, Cursor[S], JsonObject], Show[S])
   : Decoder[F, Cursor[S], Problem] =
     given CodecConfig = CodecConfig.default.withExtField("ext")
     Decoder.derived[F, S, Problem]

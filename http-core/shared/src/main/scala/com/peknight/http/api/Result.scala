@@ -2,7 +2,7 @@ package com.peknight.http.api
 
 import cats.data.Ior
 import cats.syntax.option.*
-import cats.{Id, Monad}
+import cats.{Id, Monad, Show}
 import com.peknight.api.codec.instances.pagination.given
 import com.peknight.api.codec.instances.result.{decodeResult as apiDecodeResult, encodeResult as apiEncodeResult}
 import com.peknight.api.pagination.Pagination
@@ -25,7 +25,7 @@ object Result:
     apiEncodeResult[F, S, Pagination, Problem, A, Result[A]]()(_.toProblem)
 
   given decodeResult[F[_], S, A](using Monad[F], ObjectType[S], NullType[S], ArrayType[S], BooleanType[S], NumberType[S],
-                                 StringType[S], Decoder[F, Cursor[S], JsonObject], Decoder[F, Cursor[S], A])
+                                 StringType[S], Decoder[F, Cursor[S], JsonObject], Decoder[F, Cursor[S], A], Show[S])
   : Decoder[F, Cursor[S], Result[A]] =
     apiDecodeResult[F, S, Pagination, Problem, A, Result[A]]()(_.toProblem)(Result[A].apply)
 
