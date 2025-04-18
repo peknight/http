@@ -36,6 +36,7 @@ lazy val httpCore = (crossProject(JSPlatform, JVMPlatform) in file("http-core"))
       "com.peknight" %%% "method-core" % pekMethodVersion,
       "com.peknight" %%% "api-codec-instances" % pekApiVersion,
       "com.peknight" %%% "commons-time" % pekCommonsVersion,
+      "com.peknight" %%% "cats-instances-time" % pekInstancesVersion,
     ),
   )
 
@@ -46,3 +47,4 @@ val pekExtVersion = pekVersion
 val pekMethodVersion = pekVersion
 val pekApiVersion = pekVersion
 val pekCommonsVersion = pekVersion
+val pekInstancesVersion = pekVersion

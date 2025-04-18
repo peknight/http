@@ -1,8 +1,11 @@
 package com.peknight.http
 
+import cats.Show
 import cats.effect.Sync
 import cats.syntax.flatMap.*
 import cats.syntax.functor.*
+import com.peknight.cats.instances.time.instant.given
+import com.peknight.generic.derivation.show
 import com.peknight.http4s.ext.syntax.headers.getExpiration
 import org.http4s.{EntityDecoder, Headers, Response, Status}
 
@@ -16,4 +19,5 @@ object HttpResponse:
       expiration <- response.headers.getExpiration[F]
     yield
       HttpResponse(response.status, response.headers, body, expiration)
+  given showHttpResponse[A](using Show[A]): Show[HttpResponse[A]] = show.derived[HttpResponse[A]]
 end HttpResponse
