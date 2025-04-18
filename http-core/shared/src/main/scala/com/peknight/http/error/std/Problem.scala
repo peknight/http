@@ -8,7 +8,7 @@ import com.peknight.codec.cursor.Cursor
 import com.peknight.codec.http4s.instances.status.given
 import com.peknight.codec.http4s.instances.uri.given
 import com.peknight.codec.sum.*
-import com.peknight.codec.{Codec, Decoder, Encoder}
+import com.peknight.codec.{Decoder, Encoder}
 import io.circe.{Json, JsonObject}
 import org.http4s.{Status, Uri}
 

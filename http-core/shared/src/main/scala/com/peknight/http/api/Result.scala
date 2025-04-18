@@ -4,13 +4,13 @@ import cats.data.Ior
 import cats.syntax.option.*
 import cats.{Id, Monad}
 import com.peknight.api.codec.instances.pagination.given
-import com.peknight.api.codec.instances.result.{encodeResult as apiEncodeResult, decodeResult as apiDecodeResult}
+import com.peknight.api.codec.instances.result.{decodeResult as apiDecodeResult, encodeResult as apiEncodeResult}
 import com.peknight.api.pagination.Pagination
 import com.peknight.codec.circe.iso.codec
 import com.peknight.codec.circe.sum.jsonType.given
 import com.peknight.codec.cursor.Cursor
 import com.peknight.codec.sum.*
-import com.peknight.codec.{Codec, Decoder, Encoder}
+import com.peknight.codec.{Decoder, Encoder}
 import com.peknight.http.error.std.Problem
 import com.peknight.http.syntax.error.toProblem
 import io.circe.{Json, JsonObject}
