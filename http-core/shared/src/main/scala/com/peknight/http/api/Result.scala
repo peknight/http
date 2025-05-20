@@ -1,7 +1,6 @@
 package com.peknight.http.api
 
 import cats.data.Ior
-import cats.syntax.option.*
 import cats.{Id, Monad, Show}
 import com.peknight.api.codec.instances.pagination.given
 import com.peknight.api.codec.instances.result.{decodeResult as apiDecodeResult, encodeResult as apiEncodeResult}
