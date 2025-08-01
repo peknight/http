@@ -7,7 +7,7 @@ import cats.syntax.functor.*
 import cats.syntax.option.*
 import com.peknight.commons.time.syntax.instant.toDuration
 import com.peknight.error.Error
-import com.peknight.error.syntax.applicativeError.asError
+import com.peknight.error.syntax.applicativeError.asET
 import com.peknight.http.HttpResponse
 import com.peknight.http4s.ext.syntax.headers.getRetryAfter
 import com.peknight.method.retry.Retry.{MaxAttempts, Success, stateT}
@@ -28,7 +28,7 @@ package object retry:
   : F[Either[Error, HttpResponse[A]]] =
     val eitherT =
       for
-        random <- EitherT(RandomProvider[F].random.asError)
+        random <- RandomProvider[F].random.asET
         result <- EitherT(stateT[F, (Option[Instant], Random[F]), HttpResponse[A]](fe)(f).runA((None, random)))
       yield
         result
