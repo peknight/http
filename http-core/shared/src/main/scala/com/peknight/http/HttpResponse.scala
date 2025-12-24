@@ -4,9 +4,9 @@ import cats.Show
 import cats.effect.Sync
 import cats.syntax.flatMap.*
 import cats.syntax.functor.*
-import com.peknight.cats.instances.time.instant.given
+import com.peknight.cats.instances.instant.given
 import com.peknight.generic.derivation.show
-import com.peknight.http4s.ext.syntax.headers.getExpiration
+import com.peknight.http4s.syntax.headers.getExpiration
 import org.http4s.{EntityDecoder, Headers, Response, Status}
 
 import java.time.Instant

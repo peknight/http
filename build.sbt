@@ -15,9 +15,8 @@ lazy val httpCore = (crossProject(JSPlatform, JVMPlatform) in file("http-core"))
   .settings(crossDependencies(
     peknight.codec.http4s,
     peknight.codec.circe,
-    peknight.ext.http4s,
+    peknight.http4s,
     peknight.method,
     peknight.api.instances.codec,
     peknight.commons.time,
-    peknight.instances.cats.time,
   ))

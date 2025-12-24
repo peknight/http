@@ -9,12 +9,12 @@ import com.peknight.commons.time.syntax.instant.toDuration
 import com.peknight.error.Error
 import com.peknight.error.syntax.applicativeError.asET
 import com.peknight.http.HttpResponse
-import com.peknight.http4s.ext.syntax.headers.getRetryAfter
+import com.peknight.http4s.syntax.headers.getRetryAfter
 import com.peknight.method.retry.Retry.{MaxAttempts, Success, stateT}
 import com.peknight.method.retry.{Retry, RetryState}
 import com.peknight.random.Random
 import com.peknight.random.provider.RandomProvider
-import com.peknight.spire.ext.syntax.bound.{lower, upper}
+import com.peknight.spire.syntax.bound.{lower, upper}
 import spire.math.Interval
 import spire.math.interval.ValueBound
 
