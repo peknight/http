@@ -11,9 +11,9 @@ import org.scalatest.flatspec.AsyncFlatSpec
 
 class DownloadFlatSpec extends AsyncFlatSpec with AsyncIOSpec:
   "Download" should "pass" in {
-    val uri: Uri = uri"https://github.com/fatedier/frp/releases/download/v0.66.0/frp_0.66.0_linux_amd64.tar.gz"
+    val uri: Uri = uri"https://nexus.peknight.com/repository/maven-public/org/typelevel/cats-core_3/2.13.0/cats-core_3-2.13.0.pom"
     EmberClientBuilder.default[IO].withMaxResponseHeaderSize(16384).build
-      .use(client => downloadIfNotExists[IO](GET(uri))(redirectByLocation)(using client).value)
+      .use(client => downloadIfNotExistsWithConsole[IO](GET(uri))()(using client).value)
       .map(either => assert(either.isRight))
   }
 end DownloadFlatSpec

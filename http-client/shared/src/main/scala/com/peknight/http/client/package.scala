@@ -2,6 +2,7 @@ package com.peknight.http
 
 import cats.Monad
 import cats.data.EitherT
+import cats.effect.std.Console
 import cats.effect.{Async, MonadCancel}
 import cats.syntax.applicative.*
 import cats.syntax.either.*
@@ -11,7 +12,9 @@ import com.peknight.cats.syntax.eitherT.{eLiftET, rLiftET}
 import com.peknight.error.Error
 import com.peknight.error.option.OptionEmpty
 import com.peknight.error.syntax.applicativeError.{aeAsET, asET}
+import com.peknight.fs2.syntax.stream.evalScanChunksInitLast
 import fs2.io.file.{Files, Path}
+import fs2.{Chunk, Stream}
 import org.http4s.Method.GET
 import org.http4s.Status.{Redirection, ResponseClass}
 import org.http4s.client.Client
@@ -48,7 +51,8 @@ package object client:
     }
 
   def downloadIfNotExists[F[_]](request: Request[F], filePath: Option[Path] = None, maxRedirects: Int = 5)
-                               (redirect: (Request[F], Response[F]) => Option[Request[F]])
+                               (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
+                               (body: Response[F] => Stream[F, Byte] = (response: Response[F]) => response.body)
                                (using Client[F])(using Async[F], Files[F])
   : EitherT[F, Error, Unit] =
     type G[X] = EitherT[F, Error, X]
@@ -57,8 +61,26 @@ package object client:
         .toRight(OptionEmpty.label("filePath")).eLiftET[F]
       _ <- Monad[G].ifM[Unit](Files[F].exists(path).asET)(
         ().rLiftET,
-        runWithRedirects[F, Unit](request, maxRedirects)(_.body.through(Files[F].writeAll(path)).compile.drain)(redirect)
+        runWithRedirects[F, Unit](request, maxRedirects)(response => body(response).through(Files[F].writeAll(path))
+          .compile.drain)(redirect)
       )
     yield
       ()
+
+  def downloadIfNotExistsWithConsole[F[_]](request: Request[F], filePath: Option[Path] = None, maxRedirects: Int = 5)
+                                          (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
+                                          (using Client[F])(using Async[F], Files[F], Console[F])
+  : EitherT[F, Error, Unit] =
+    def show(bytes: Long, chunk: Chunk[Byte], response: Response[F]): (Long, String) =
+      val next = bytes + chunk.size
+      (next, s"\r$next Bytes${response.contentLength.map(contentLength => s" / $contentLength Bytes = ${next * 100 / contentLength}%").getOrElse("")}")
+    downloadIfNotExists[F](request, filePath, maxRedirects)(redirect)(response =>
+      response.body.evalScanChunksInitLast[F, Byte, Byte, Long](0L) { (bytes, chunk) =>
+        val (next, message) = show(bytes, chunk, response)
+        Console[F].print(message).as((next, chunk))
+      } { (bytes, chunk) =>
+        val (next, message) = show(bytes, chunk, response)
+        Console[F].println(message).as(chunk)
+      }
+    )
 end client
