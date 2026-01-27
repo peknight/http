@@ -8,6 +8,8 @@ lazy val http = (project in file("."))
   .aggregate(
     httpCore.jvm,
     httpCore.js,
+    httpClient.jvm,
+    httpClient.js,
   )
 
 lazy val httpCore = (crossProject(JSPlatform, JVMPlatform) in file("http-core"))
@@ -19,4 +21,20 @@ lazy val httpCore = (crossProject(JSPlatform, JVMPlatform) in file("http-core"))
     peknight.method,
     peknight.api.instances.codec,
     peknight.commons.time,
+  ))
+
+lazy val httpClient = (crossProject(JSPlatform, JVMPlatform) in file("http-client"))
+  .settings(name := "http-client")
+  .settings(crossDependencies(
+    peknight.error,
+    http4s.client,
+    fs2.io,
+  ))
+  .settings(crossTestDependencies(
+    http4s.ember.client,
+    scalaTest.flatSpec,
+    typelevel.catsEffect.testingScalaTest,
+  ))
+  .settings(libraryDependencies ++= Seq(
+    jvmTestDependency(logback.classic),
   ))
