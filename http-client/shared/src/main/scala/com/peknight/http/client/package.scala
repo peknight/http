@@ -2,12 +2,13 @@ package com.peknight.http
 
 import cats.Monad
 import cats.data.EitherT
-import cats.syntax.monadError.*
 import cats.effect.std.Console
 import cats.effect.{Async, MonadCancel}
 import cats.syntax.applicative.*
 import cats.syntax.either.*
+import cats.syntax.flatMap.*
 import cats.syntax.functor.*
+import cats.syntax.monadError.*
 import cats.syntax.option.*
 import com.peknight.cats.syntax.eitherT.{eLiftET, rLiftET}
 import com.peknight.error.Error
@@ -25,36 +26,38 @@ import org.http4s.{Request, Response}
 import scala.CanEqual.derived
 
 package object client:
+  private given CanEqual[ResponseClass, ResponseClass] = derived
+
   private def redirectByLocation[F[_]](request: Request[F], response: Response[F]): Option[Request[F]] =
     response.headers.get[Location] match
       case Some(location) => Request(GET, request.uri.resolve(location.uri)).some
       case _ => None
 
   def runWithRedirects[F[_], A](request: Request[F], maxRedirects: Int = 5)
-                               (decode: Response[F] => F[A])
+                               (decode: (Response[F], F[Unit]) => F[A])
                                (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
                                (using client: Client[F])(using MonadCancel[F, Throwable])
   : EitherT[F, Error, A] =
     type G[X] = EitherT[F, Error, X]
     Monad[G].tailRecM[(Request[F], Int), A]((request, maxRedirects)) {
-      case (request, maxRedirects) => client.run(request).use { response =>
-        given CanEqual[ResponseClass, ResponseClass] = derived
+      case (request, maxRedirects) => client.run(request).allocated.flatMap { (response, release) =>
         if response.status.responseClass == Redirection then
-          if maxRedirects <= 0 then Error(response.status).asLeft[Either[(Request[F], Int), A]].pure[F]
+          if maxRedirects <= 0 then release.as(Error(response.status).asLeft[Either[(Request[F], Int), A]])
           else redirect(request, response) match
-            case Some(request) => (request, maxRedirects - 1).asLeft[A].asRight[Error].pure[F]
-            case _ => OptionEmpty.label("Location").asLeft[Either[(Request[F], Int), A]].pure[F]
+            case Some(request) => release.as((request, maxRedirects - 1).asLeft[A].asRight[Error])
+            case _ => release.as(OptionEmpty.label("Location").asLeft[Either[(Request[F], Int), A]])
         else if response.status.isSuccess then
-          decode(response).map(_.asRight[(Request[F], Int)].asRight[Error])
+          decode(response, release).map(_.asRight[(Request[F], Int)].asRight[Error])
         else
-          Error(response.status).asLeft[Either[(Request[F], Int), A]].pure[F]
+          release.as(Error(response.status).asLeft[Either[(Request[F], Int), A]])
       }.aeAsET
     }
 
   def bodyWithRedirects[F[_]](request: Request[F], maxRedirects: Int = 5)
                              (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
                              (using client: Client[F])(using MonadCancel[F, Throwable]): Stream[F, Byte] =
-    Stream.eval[F, Stream[F, Byte]](runWithRedirects[F, Stream[F, Byte]](request, maxRedirects)(_.body.pure[F])(redirect).value.rethrow).flatten
+    Stream.eval[F, Stream[F, Byte]](runWithRedirects[F, Stream[F, Byte]](request, maxRedirects)((response, release) =>
+      response.body.onFinalize(release).pure[F])(redirect).value.rethrow).flatten
 
   def downloadIfNotExists[F[_]](request: Request[F], filePath: Option[Path] = None, maxRedirects: Int = 5)
                                (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
@@ -67,7 +70,9 @@ package object client:
         .toRight(OptionEmpty.label("filePath")).eLiftET[F]
       _ <- Monad[G].ifM[Unit](Files[F].exists(path).asET)(
         ().rLiftET,
-        runWithRedirects[F, Unit](request, maxRedirects)(response => body(response).through(Files[F].writeAll(path))
+        runWithRedirects[F, Unit](request, maxRedirects)((response, release) => body(response)
+          .through(Files[F].writeAll(path))
+          .onFinalize(release)
           .compile.drain)(redirect)
       )
     yield
