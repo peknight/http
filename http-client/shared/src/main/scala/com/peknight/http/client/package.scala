@@ -2,6 +2,7 @@ package com.peknight.http
 
 import cats.Monad
 import cats.data.EitherT
+import cats.syntax.monadError.*
 import cats.effect.std.Console
 import cats.effect.{Async, MonadCancel}
 import cats.syntax.applicative.*
@@ -31,7 +32,7 @@ package object client:
 
   def runWithRedirects[F[_], A](request: Request[F], maxRedirects: Int = 5)
                                (decode: Response[F] => F[A])
-                               (redirect: (Request[F], Response[F]) => Option[Request[F]])
+                               (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
                                (using client: Client[F])(using MonadCancel[F, Throwable])
   : EitherT[F, Error, A] =
     type G[X] = EitherT[F, Error, X]
@@ -49,6 +50,11 @@ package object client:
           Error(response.status).asLeft[Either[(Request[F], Int), A]].pure[F]
       }.aeAsET
     }
+
+  def bodyWithRedirects[F[_]](request: Request[F], maxRedirects: Int = 5)
+                             (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
+                             (using client: Client[F])(using MonadCancel[F, Throwable]): Stream[F, Byte] =
+    Stream.eval[F, Stream[F, Byte]](runWithRedirects[F, Stream[F, Byte]](request, maxRedirects)(_.body.pure[F])(redirect).value.rethrow).flatten
 
   def downloadIfNotExists[F[_]](request: Request[F], filePath: Option[Path] = None, maxRedirects: Int = 5)
                                (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
