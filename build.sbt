@@ -30,6 +30,7 @@ lazy val httpClient = (crossProject(JSPlatform, JVMPlatform) in file("http-clien
     peknight.error,
     http4s.client,
     fs2.io,
+    typelevel.squants,
   ))
   .settings(crossTestDependencies(
     http4s.ember.client,
