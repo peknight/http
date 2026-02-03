@@ -15,7 +15,7 @@ import org.http4s.client.Client
 import org.http4s.{Request, Response}
 
 package object download:
-  def download[F[_]](request: Request[F], directory: Option[Path] = None, fileName: Option[Path] = None,
+  def download[F[_]](request: Request[F], fileName: Option[Path] = None, directory: Option[Path] = None,
                      overwrite: Boolean = true, maxRedirects: Int = 5)
                     (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
                     (observe: Response[F] => Pipe[F, Byte, Nothing] = (response: Response[F]) => (in: Stream[F, Byte]) => in.drain)
@@ -23,7 +23,7 @@ package object download:
   : EitherT[F, Error, Unit] =
     type G[X] = EitherT[F, Error, X]
     for
-      path <- path(request, directory, fileName).toRight(OptionEmpty.label("fileName")).eLiftET[F]
+      path <- path(request.uri, fileName, directory).toRight(OptionEmpty.label("fileName")).eLiftET[F]
       _ <- Monad[G].ifM[Unit](if overwrite then false.pure[G] else Files[F].exists(path).asET)(
         ().rLiftET,
         for

@@ -19,7 +19,7 @@ import fs2.{Chunk, Pipe, Stream}
 import org.http4s.Status.{Redirection, ResponseClass}
 import org.http4s.client.Client
 import org.http4s.headers.Location
-import org.http4s.{Request, Response}
+import org.http4s.{Request, Response, Uri}
 import squants.information.*
 
 import scala.CanEqual.derived
@@ -70,8 +70,8 @@ package object client:
   private def redirectByLocation[F[_]](request: Request[F], response: Response[F]): Option[Request[F]] =
     response.headers.get[Location].map(location => Request(uri = request.uri.resolve(location.uri)))
 
-  private def path[F[_]](request: Request[F], directory: Option[Path], fileName: Option[Path]): Option[Path] =
-    fileName.orElse(request.uri.path.segments.lastOption.map(segment => Path(segment.toString)))
+  def path(uri: Uri, fileName: Option[Path] = None, directory: Option[Path] = None): Option[Path] =
+    fileName.orElse(uri.path.segments.lastOption.map(segment => Path(segment.toString)))
       .map(filePath => directory.map(_ / filePath).getOrElse(filePath))
 
   def showProgressInConsole[F[_]: {Monad, Console}](response: Response[F]): Pipe[F, Byte, Nothing] =
