@@ -27,6 +27,7 @@ lazy val httpClient = (crossProject(JSPlatform, JVMPlatform) in file("http-clien
   .settings(name := "http-client")
   .settings(crossDependencies(
     peknight.fs2,
+    peknight.fs2.io,
     peknight.error,
     http4s.client,
     fs2.io,

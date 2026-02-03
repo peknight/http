@@ -10,12 +10,11 @@ import cats.syntax.functor.*
 import cats.syntax.monadError.*
 import cats.syntax.show.*
 import cats.{Applicative, Monad, Show}
-import com.peknight.cats.syntax.eitherT.{eLiftET, rLiftET}
 import com.peknight.error.Error
 import com.peknight.error.option.OptionEmpty
-import com.peknight.error.syntax.applicativeError.{aeAsET, asET}
+import com.peknight.error.syntax.applicativeError.aeAsET
 import com.peknight.fs2.pipe.evalScanChunks
-import fs2.io.file.{Files, Path}
+import fs2.io.file.Path
 import fs2.{Chunk, Pipe, Stream}
 import org.http4s.Status.{Redirection, ResponseClass}
 import org.http4s.client.Client
@@ -54,34 +53,6 @@ package object client:
       ).aeAsET
     ).value.rethrow).flatten
 
-  def download[F[_]](request: Request[F], directory: Option[Path] = None, fileName: Option[Path] = None, maxRedirects: Int = 5)
-                    (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
-                    (observe: Response[F] => Pipe[F, Byte, Nothing] = (response: Response[F]) => (in: Stream[F, Byte]) => in.drain)
-                    (using Client[F])(using Async[F], Files[F])
-  : EitherT[F, Error, Unit] =
-    for
-      path <- path(request, directory, fileName).toRight(OptionEmpty.label("fileName")).eLiftET[F]
-      _ <- bodyWithRedirects[F](request, maxRedirects)(redirect)(observe).through(Files[F].writeAll(path))
-          .compile.drain.asET
-    yield
-      ()
-
-  def downloadIfNotExists[F[_]](request: Request[F], directory: Option[Path] = None, fileName: Option[Path] = None, maxRedirects: Int = 5)
-                               (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
-                               (observe: Response[F] => Pipe[F, Byte, Nothing] = (response: Response[F]) => (in: Stream[F, Byte]) => in.drain)
-                               (using Client[F])(using Async[F], Files[F])
-  : EitherT[F, Error, Unit] =
-    type G[X] = EitherT[F, Error, X]
-    for
-      path <- path(request, directory, fileName).toRight(OptionEmpty.label("fileName")).eLiftET[F]
-      _ <- Monad[G].ifM[Unit](Files[F].exists(path).asET)(
-        ().rLiftET,
-        bodyWithRedirects[F](request, maxRedirects)(redirect)(observe).through(Files[F].writeAll(path))
-          .compile.drain.asET
-      )
-    yield
-      ()
-
   private def tailRecRedirect[F[_], A](request: Request[F], response: Response[F], redirects: Int)
                                       (decode: Response[F] => F[A])
                                       (redirect: (Request[F], Response[F]) => Option[Request[F]])
@@ -107,18 +78,18 @@ package object client:
     val total: Option[Information] = response.contentLength.filter(_ > 0).map(Bytes.apply)
     given Show[Information] with
       def show(t: Information): String =
-        if t > Yottabytes(1) then BigDecimal(t.toYottabytes).setScale(3).toString
-        else if t > Zettabytes(1) then BigDecimal(t.toZettabytes).setScale(3).toString
-        else if t > Exabytes(1) then BigDecimal(t.toExabytes).setScale(3).toString
-        else if t > Petabytes(1) then BigDecimal(t.toPetabytes).setScale(3).toString
-        else if t > Terabytes(1) then BigDecimal(t.toTerabytes).setScale(3).toString
-        else if t > Gigabytes(1) then BigDecimal(t.toGigabytes).setScale(3).toString
-        else if t > Megabytes(1) then BigDecimal(t.toMegabytes).setScale(3).toString
-        else if t > Kilobytes(1) then BigDecimal(t.toKilobytes).setScale(3).toString
+        if t > Yottabytes(1) then t.in(Yottabytes).toString
+        else if t > Zettabytes(1) then t.in(Zettabytes).toString
+        else if t > Exabytes(1) then t.in(Exabytes).toString
+        else if t > Petabytes(1) then t.in(Petabytes).toString
+        else if t > Terabytes(1) then t.in(Terabytes).toString
+        else if t > Gigabytes(1) then t.in(Gigabytes).toString
+        else if t > Megabytes(1) then t.in(Megabytes).toString
+        else if t > Kilobytes(1) then t.in(Kilobytes).toString
         else t.toBytes.toInt.toString
     end given
     in => in.through(evalScanChunks[F, F, Byte, Byte, Nothing, Information](Bytes(0)) { (acc, chunk) =>
       val next = acc + Bytes(chunk.size)
-      Console[F].print(s"\r${next.show}${total.map(t => s" / ${t.show} = ${(t / next).toInt}%")}").as((next, Chunk.empty))
+      Console[F].print(s"\r${next.show}${total.map(t => s" / ${t.show} = ${(next * 100 / t).toInt}%").getOrElse("")}").as((next, Chunk.empty))
     }).onFinalize[F](Console[F].println(""))
 end client
