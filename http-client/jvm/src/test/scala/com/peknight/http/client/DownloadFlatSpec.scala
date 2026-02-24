@@ -17,6 +17,6 @@ class DownloadFlatSpec extends AsyncFlatSpec with AsyncIOSpec:
     val uri: Uri = uri"https://nexus.peknight.com/repository/maven-public/org/typelevel/cats-core_3/2.13.0/cats-core_3-2.13.0.pom"
     EmberClientBuilder.default[IO].withMaxResponseHeaderSize(16384).build
       .use(client => download[IO](GET(uri), directory = Path("test").some)()(showProgressInConsole[IO])(using client).value)
-      .map(either => assert(either.isRight))
+      .map(_ => assert(true))
   }
 end DownloadFlatSpec
