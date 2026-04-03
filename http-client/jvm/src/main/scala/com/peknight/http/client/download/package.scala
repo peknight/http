@@ -31,6 +31,7 @@ package object download:
           part = Path(s"$path.part")
           _ <- bodyWithRedirects[F](request, maxRedirects)(redirect)(observe).through(Files[F].writeAll(part))
             .compile.drain.asET
+          _ <- Monad[F].ifM[Unit](Files[F].exists(path))(Files[F].delete(path), ().pure[F]).asET
           _ <- Files[F].move(part, path).asET
         yield
           ()
