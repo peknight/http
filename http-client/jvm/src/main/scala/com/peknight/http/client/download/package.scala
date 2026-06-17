@@ -14,16 +14,21 @@ import fs2.{Pipe, Stream}
 import org.http4s.client.Client
 import org.http4s.{Request, Response}
 
+import java.nio.charset.{Charset, StandardCharsets}
+
 package object download:
   def download[F[_]](request: Request[F], fileName: Option[Path] = None, directory: Option[Path] = None,
-                     overwrite: Boolean = true, maxRedirects: Int = 5)
+                     overwrite: Boolean = true, maxRedirects: Int = 5,
+                     charset: Charset = StandardCharsets.UTF_8, plusIsSpace: Boolean = false,
+                     toSkip: Char => Boolean = Function.const(false))
                     (redirect: (Request[F], Response[F]) => Option[Request[F]] = redirectByLocation[F])
                     (observe: Response[F] => Pipe[F, Byte, Nothing] = (response: Response[F]) => (in: Stream[F, Byte]) => in.drain)
                     (using Client[F])(using Async[F], Files[F])
   : EitherT[F, Error, Unit] =
     type G[X] = EitherT[F, Error, X]
     for
-      path <- path(request.uri, fileName, directory).toRight(OptionEmpty.label("fileName")).eLiftET[F]
+      path <- path(request.uri, fileName, directory, charset, plusIsSpace, toSkip)
+        .toRight(OptionEmpty.label("fileName")).eLiftET[F]
       _ <- Monad[G].ifM[Unit](if overwrite then false.pure[G] else Files[F].exists(path).asET)(
         ().rLiftET,
         for

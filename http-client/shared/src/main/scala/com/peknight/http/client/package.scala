@@ -22,7 +22,9 @@ import org.http4s.headers.Location
 import org.http4s.{Request, Response, Uri}
 import squants.information.*
 
+import java.nio.charset.{Charset, StandardCharsets}
 import scala.CanEqual.derived
+import scala.util.Try
 
 package object client:
   private given CanEqual[ResponseClass, ResponseClass] = derived
@@ -70,8 +72,11 @@ package object client:
   private def redirectByLocation[F[_]](request: Request[F], response: Response[F]): Option[Request[F]] =
     response.headers.get[Location].map(location => Request(uri = request.uri.resolve(location.uri)))
 
-  def path(uri: Uri, fileName: Option[Path] = None, directory: Option[Path] = None): Option[Path] =
-    fileName.orElse(uri.path.segments.lastOption.map(segment => Path(segment.toString)))
+  def path(uri: Uri, fileName: Option[Path] = None, directory: Option[Path] = None,
+           charset: Charset = StandardCharsets.UTF_8, plusIsSpace: Boolean = false,
+           toSkip: Char => Boolean = Function.const(false)): Option[Path] =
+    fileName.orElse(uri.path.segments.lastOption
+        .map(segment => Path(Try(segment.decoded(charset, plusIsSpace, toSkip)).getOrElse(segment.toString))))
       .map(filePath => directory.map(_ / filePath).getOrElse(filePath))
 
   def showProgressInConsole[F[_]: {Monad, Console}](response: Response[F]): Pipe[F, Byte, Nothing] =
